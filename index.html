@@ -1292,8 +1292,20 @@ if (b) b.textContent = '☁️ 불러오는 중…';
 
 loadFromFirestore().then(loaded => {
   if (!loaded) {
-    // Firestore에 데이터 없으면 localStorage 또는 URL에서 시도
-    if (!loadFromUrl()) loadData();
+    // Firestore 비어있음 → localStorage or URL에서 불러온 뒤 Firestore에 올리기
+    loadFromUrl() || loadData();
+    // 기존 데이터를 Firestore에 자동 마이그레이션
+    if (library.length > 0) {
+      if (b) b.textContent = '☁️ 기존 데이터 업로드 중…';
+      window._lib       = library;
+      window._sched     = sched;
+      window._libSeq    = libSeq;
+      window._evSeq     = evSeq;
+      window._kidColors = kidColors;
+      saveToFirestore().then(() => {
+        showToast('✅ 기존 일정을 클라우드에 저장했어요!');
+      });
+    }
   }
   buildTabs(); renderLib(); renderView();
   if (b) b.textContent = '';
