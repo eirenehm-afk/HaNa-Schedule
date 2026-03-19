@@ -192,7 +192,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .btn-p{background:var(--text);color:#fff;font-weight:500;flex:2;}
 .btn-p:hover{opacity:.82;}
 
-.ctx{display:none;position:fixed;background:var(--card);border-radius:10px;border:1px solid var(--border);box-shadow:0 6px 24px rgba(0,0,0,.12);z-index:300;overflow:hidden;min-width:180px;}
+.ctx{display:none;position:fixed;background:var(--card);border-radius:10px;border:1px solid var(--border);box-shadow:0 6px 24px rgba(0,0,0,.12);z-index:300;overflow:hidden;min-width:190px;}
 .ctx.open{display:block;}
 .ctx button{display:block;width:100%;padding:10px 14px;background:transparent;border:none;font-family:'Noto Sans KR',sans-serif;font-size:.8rem;color:var(--text);cursor:pointer;transition:background .1s;text-align:left;}
 .ctx button:hover{background:var(--bg);}
@@ -287,7 +287,11 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <div class="day-tabs" id="dayTabs"></div>
     </div>
     <div class="topbar-right">
-      <span class="date-lbl" id="dateLbl"></span>
+      <div style="display:flex;align-items:center;gap:3px;border:1px solid var(--border);border-radius:7px;background:var(--bg);padding:2px 4px;">
+        <button onclick="changeWeek(-1)" style="border:none;background:transparent;cursor:pointer;font-size:.85rem;padding:2px 5px;color:var(--muted);border-radius:4px;" title="이전 주">‹</button>
+        <span class="date-lbl" id="dateLbl" style="cursor:pointer;font-size:.72rem;min-width:80px;text-align:center;" onclick="changeWeek(0)" title="오늘로 돌아가기"></span>
+        <button onclick="changeWeek(1)" style="border:none;background:transparent;cursor:pointer;font-size:.85rem;padding:2px 5px;color:var(--muted);border-radius:4px;" title="다음 주">›</button>
+      </div>
       <button class="print-btn" onclick="doShare()" id="shareBtn">🔗 <span>링크 공유</span></button>
       <button class="print-btn" onclick="doPrint()">🖨 <span>인쇄 · PDF</span></button>
       <span id="saveBadge" style="font-size:.65rem;color:var(--muted);white-space:nowrap;"></span>
@@ -337,9 +341,17 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <button class="who-btn" id="whB" onclick="setWho('both')">공통</button>
       </div>
     </div>
-    <div class="fg">
+    <div class="fg" id="fgDaySel">
       <label>요일 <span style="font-weight:300;text-transform:none;letter-spacing:0">(복수 선택)</span></label>
       <div class="day-sel" id="daySel"></div>
+    </div>
+    <div class="fg">
+      <label>반복</label>
+      <div style="display:flex;gap:6px;">
+        <button class="who-btn" id="rp_week" onclick="setRepeat('week')">이번주만</button>
+        <button class="who-btn" id="rp_every" onclick="setRepeat('every')">매주</button>
+        <button class="who-btn" id="rp_month" onclick="setRepeat('month')">매달</button>
+      </div>
     </div>
     <div class="modal-acts">
       <button class="btn btn-g" onclick="closeLibOv()">취소</button>
@@ -415,9 +427,10 @@ const TOTAL = (E_MIN - S_MIN) / SLOT; // 204
 // ── State ──────────────────────────────────────────────────
 let curDay = (()=>{ const d=new Date().getDay(); return d===0?6:d-1; })();
 let viewMode = 'day';
+let weekOffset = 0; // 0=이번주, -1=저번주, 1=다음주
 let library = [], sched = {};
 let libSeq = 0, evSeq = 0;
-let libEditId = null, whoSel = 'both', daysSel = [];
+let libEditId = null, whoSel = 'both', daysSel = [], repeatSel = 'every';
 let editEvCtx = null, ctxInfo = null;
 let toastTimer = null;
 // 이번주 예외: { weekKey: { evId: {skip:true} | {s, e} } }
@@ -553,13 +566,7 @@ function closePalettes() {
 
 const minY  = m => ((m - S_MIN) / SLOT) * SH;
 
-// 이번주 키 생성 (ISO 주차)
-function getWeekKey() {
-  const now = new Date();
-  const mon = new Date(now);
-  mon.setDate(now.getDate() - ((now.getDay()+6)%7));
-  return mon.toISOString().slice(0,10);
-}
+// getWeekKey는 위 weekDates 섹션에서 정의됨
 function getException(evId) {
   const wk = getWeekKey();
   return weekExceptions[wk] && weekExceptions[wk][evId];
@@ -586,16 +593,24 @@ function evCls(type, who) {
 function typeColor(who) {
   return who==='child2' ? 'var(--c2)' : who==='both' ? 'var(--both)' : 'var(--c1)';
 }
-function weekDates() {
+function getMonday(offset=0) {
   const now=new Date(), mon=new Date(now);
-  mon.setDate(now.getDate() - ((now.getDay()+6)%7));
+  mon.setDate(now.getDate() - ((now.getDay()+6)%7) + offset*7);
+  mon.setHours(0,0,0,0);
+  return mon;
+}
+function weekDates() {
+  const mon = getMonday(weekOffset);
   return Array.from({length:7}, (_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); return {m:d.getMonth()+1,d:d.getDate()}; });
 }
 function fullDate(idx) {
-  const now=new Date(), mon=new Date(now);
-  mon.setDate(now.getDate() - ((now.getDay()+6)%7));
+  const mon = getMonday(weekOffset);
   const d=new Date(mon); d.setDate(mon.getDate()+idx);
   return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일`;
+}
+function getWeekKey() {
+  const mon = getMonday(weekOffset);
+  return mon.toISOString().slice(0,10);
 }
 
 // ── Toast ──────────────────────────────────────────────────
@@ -691,7 +706,7 @@ function renderLib() {
         <div class="lib-info">
           <div class="lib-name">${it.name}</div>
           <div class="lib-meta">${fmt(it.ds)} – ${fmt(it.de)}</div>
-          <div class="lib-days">${dStr}</div>
+          <div class="lib-days">${dStr} · ${{week:'이번주만',every:'매주',month:'매달'}[it.repeat]||'매주'}</div>
         </div>
         <div class="lib-acts">
           <button class="lib-act" onclick="openLibOvEdit(${it.id})">✎</button>
@@ -706,13 +721,13 @@ function renderLib() {
 
 // ── Library Modal ──────────────────────────────────────────
 function openLibOv(id=null) {
-  libEditId = id; whoSel = 'both'; daysSel = [];
+  libEditId = id; whoSel = 'both'; daysSel = []; repeatSel = 'every';
   if (id) {
     const it = library.find(i=>i.id===id);
     document.getElementById('libTitle').textContent = '일정 수정';
     document.getElementById('lName').value = it.name;
     document.getElementById('lType').value = it.type;
-    whoSel = it.who; daysSel = [...it.days];
+    whoSel = it.who; daysSel = [...it.days]; repeatSel = it.repeat || 'every';
     buildPicker('tpLS', it.ds); buildPicker('tpLE', it.de);
   } else {
     document.getElementById('libTitle').textContent = '일정 만들기';
@@ -720,7 +735,7 @@ function openLibOv(id=null) {
     document.getElementById('lType').value = 'act';
     buildPicker('tpLS', 9*60); buildPicker('tpLE', 10*60);
   }
-  updWho(); buildDaySel();
+  updWho(); updRepeat(); buildDaySel();
   document.getElementById('libOv').classList.add('open');
   positionModal('libModal');
   setTimeout(()=>document.getElementById('lName').focus(), 80);
@@ -728,6 +743,17 @@ function openLibOv(id=null) {
 function openLibOvEdit(id) { openLibOv(id); }
 function closeLibOv() { document.getElementById('libOv').classList.remove('open'); }
 function setWho(w) { whoSel = w; updWho(); }
+function setRepeat(r) { repeatSel = r; updRepeat(); }
+function updRepeat() {
+  ['week','every','month'].forEach(r => {
+    const btn = document.getElementById('rp_'+r);
+    if (!btn) return;
+    btn.className = 'who-btn' + (repeatSel===r ? ' sb' : '');
+  });
+  // 이번주만 선택 시 요일 선택 자동으로 현재 요일
+  const fg = document.getElementById('fgDaySel');
+  if (fg) fg.style.display = repeatSel==='month' ? 'none' : '';
+}
 function updWho() {
   document.getElementById('wh1').className = 'who-btn'+(whoSel==='child1'?' s1':'');
   document.getElementById('wh1').textContent = n1();
@@ -739,6 +765,22 @@ function updWho() {
 function addToSchedule(it) {
   const targets = it.who==='both' ? ['child1','child2'] : [it.who];
   const conflicts = [];
+  // 반복 타입: week=이번주만(weekOffset 기준), every=매주, month=매달
+  let targetDays = [...it.days];
+  if (it.repeat === 'week') {
+    // 이번주만: weekExceptions에 저장하지 않고 sched에 일회성으로 추가
+    // weekKey를 evId에 태그해 다음주에 자동 제거
+    const wk = getWeekKey();
+    targetDays = it.days;
+    targets.forEach(ck => {
+      targetDays.forEach(di => {
+        const newEv = {id:++evSeq, lid:it.id, name:it.name, s:it.ds, e:it.de, type:it.type, who:it.who, _weekOnly:wk};
+        sched[di][ck].push(newEv);
+        markOverlaps(di);
+      });
+    });
+    return;
+  }
   it.days.forEach(di => {
     targets.forEach(ck => {
       const newEv = {id:++evSeq, lid:it.id, name:it.name, s:it.ds, e:it.de, type:it.type, who:it.who};
@@ -866,6 +908,11 @@ function buildTabs() {
 }
 function switchDay(i) { curDay=i; viewMode='day'; buildTabs(); renderView(); closeSidebar(); }
 function switchView(v) { viewMode=v; buildTabs(); renderView(); }
+function changeWeek(dir) {
+  if (dir === 0) { weekOffset = 0; } // 오늘로
+  else { weekOffset += dir; }
+  buildTabs(); renderView();
+}
 
 // ── Gutter / Slot Rows ─────────────────────────────────────
 function gutterHtml() {
@@ -1027,13 +1074,20 @@ function renderWeekView() {
 }
 
 function renderView() {
+  // 만료된 이번주만(_weekOnly) 이벤트 정리
+  const thisWk = getWeekKey();
+  for (let d=0; d<7; d++) {
+    ['child1','child2'].forEach(ck => {
+      sched[d][ck] = sched[d][ck].filter(ev => !ev._weekOnly || ev._weekOnly === thisWk);
+    });
+  }
   const area=document.getElementById('viewArea');
   area.innerHTML='';
   area.appendChild(viewMode==='week'?renderWeekView():renderDayView());
   // Now-line
   const todayIdx=(()=>{const d=new Date().getDay();return d===0?6:d-1;})();
   const now=new Date(), nm=now.getHours()*60+now.getMinutes();
-  if (nm>=S_MIN&&nm<=E_MIN) {
+  if (nm>=S_MIN&&nm<=E_MIN&&weekOffset===0) {
     const y=minY(nm);
     const sel=viewMode==='day'&&curDay===todayIdx?'.slots-grid':`[data-day="${todayIdx}"]`;
     document.querySelectorAll(sel).forEach(g=>{
@@ -1200,11 +1254,11 @@ function saveLib() {
         sched[d].child1 = sched[d].child1.filter(e=>e.lid!==libEditId);
         sched[d].child2 = sched[d].child2.filter(e=>e.lid!==libEditId);
       }
-      Object.assign(it, {name, ds, de, type, who:whoSel, days:[...daysSel]});
+      Object.assign(it, {name, ds, de, type, who:whoSel, days:[...daysSel], repeat:repeatSel});
       addToSchedule(it);
     }
   } else {
-    const it = {id:++libSeq, name, ds, de, type, who:whoSel, days:[...daysSel]};
+    const it = {id:++libSeq, name, ds, de, type, who:whoSel, days:[...daysSel], repeat:repeatSel};
     library.push(it);
     addToSchedule(it);
   }
